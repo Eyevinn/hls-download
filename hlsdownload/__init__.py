@@ -43,23 +43,23 @@ class HLSDownloader:
             else:
                 segmentlist.convert()
 
-    def _concatSegments(self, bitrate=None):
+    def _concatSegments(self, output, bitrate=None):
         for segmentlist in self.bitrates:
             if bitrate:
                 if segmentlist.getBitrate() == bitrate:
-                    segmentlist.concat()
+                    segmentlist.concat(output)
             else:
-                segmentlist.concat()
+                segmentlist.concat(output)
 
     def _cleanup(self):
         for segmentlist in self.bitrates:
             segmentlist.cleanup()
 
-    def toMP4(self, bitrate=None):
+    def toMP4(self, output, bitrate=None):
         self._collectSegments()
         self._downloadSegments(bitrate)
         self._convertSegments(bitrate)
-        self._concatSegments(bitrate)
+        self._concatSegments(output, bitrate)
         if self.cleanup:
             self._cleanup()
 
@@ -103,15 +103,14 @@ class SegmentList:
                 FFMpegCommand(self.downloaddir + segfname, self.downloaddir + mp4fname, '-acodec copy -bsf:a aac_adtstoasc -vcodec copy')
             self.mp4segs.append(mp4fname)
 
-    def concat(self):
-        output = str(self.bitrate) + '.mp4'
-        if not os.path.isfile(self.downloaddir + output):
+    def concat(self, outputname):
+        output = outputname + '-' + str(self.bitrate) + '.mp4'
+        if not os.path.isfile(output):
             lstfile = open(self.downloaddir + output + '.lst', 'w')
             for mp4fname in self.mp4segs:
-                #lstfile.write("file '%s%s'\n" % (self.downloaddir, mp4fname))      
                 lstfile.write("file '%s'\n" % mp4fname)      
             lstfile.close()
-            FFMpegConcat(self.downloaddir + output + '.lst', self.downloaddir + output)
+            FFMpegConcat(self.downloaddir + output + '.lst', output)
 
     def cleanup(self):
         if os.path.exists(self.downloaddir):
@@ -148,5 +147,7 @@ def FFMpegConcat(lstfile, outfile):
     cmd.append('0')
     cmd.append('-i')
     cmd.append(lstfile) 
+    cmd.append('-c')
+    cmd.append('copy')
     cmd.append(outfile)
     runcmd(cmd, 'ffmpeg')
