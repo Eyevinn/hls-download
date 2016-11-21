@@ -81,6 +81,7 @@ class SegmentList:
         m3u8_obj = m3u8.load(self.mediaplaylisturi)
         if not os.path.exists(self.downloaddir):
             os.mkdir(self.downloaddir)
+        print "Downloading segments from %s" % self.mediaplaylisturi
         for seg in m3u8_obj.segments:
             head, tail = ntpath.split(self.downloaddir + seg.uri)
             localfname = tail
@@ -105,6 +106,7 @@ class SegmentList:
 
     def concat(self, outputname):
         output = outputname + '-' + str(self.bitrate) + '.mp4'
+        print "Converting segments and writing to %s" % output
         if not os.path.isfile(output):
             lstfile = open(self.downloaddir + output + '.lst', 'w')
             for mp4fname in self.mp4segs:
