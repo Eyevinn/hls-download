@@ -17,6 +17,7 @@ class HLSDownloader:
         self.tmpdir = tmpdir
         self.bitrates = []
         self.cleanup = cleanup
+        self._collectSegments()
 
     def _collectSegments(self):
         m3u8_obj = m3u8.load(self.manifesturi)
@@ -55,8 +56,16 @@ class HLSDownloader:
         for segmentlist in self.bitrates:
             segmentlist.cleanup()
 
+    def writeDiscontinuityFile(self, output):
+        # We can assume that all bitrates are aligned so we only
+        # need to look at one of the bitrates
+        segmentlist = self.bitrates[0]
+        with open(output + '.txt', 'w') as f:
+            for d in segmentlist.getDiscontinuities():
+                f.write(str(d) + '\n')
+        f.close()
+
     def toMP4(self, output, bitrate=None):
-        self._collectSegments()
         self._downloadSegments(bitrate)
         self._convertSegments(bitrate)
         self._concatSegments(output, bitrate)
@@ -73,23 +82,23 @@ class SegmentList:
             self.downloaddir = str(self.bitrate) + '/'
         self.downloadedsegs = []
         self.mp4segs = []
+        self.m3u8_obj = m3u8.load(self.mediaplaylisturi)
 
     def getBitrate(self):
         return self.bitrate
 
     def download(self):
-        m3u8_obj = m3u8.load(self.mediaplaylisturi)
         if not os.path.exists(self.downloaddir):
             os.mkdir(self.downloaddir)
         print "Downloading segments from %s" % self.mediaplaylisturi
-        for seg in m3u8_obj.segments:
+        for seg in self.m3u8_obj.segments:
             head, tail = ntpath.split(self.downloaddir + seg.uri)
             localfname = tail
             if not os.path.isfile(self.downloaddir + localfname):
-                debug.log('Downloading %s%s to %s%s' % (m3u8_obj.base_uri, seg.uri, self.downloaddir, localfname)) 
+                debug.log('Downloading %s%s to %s%s' % (self.m3u8_obj.base_uri, seg.uri, self.downloaddir, localfname)) 
                 fp = open(self.downloaddir + localfname, 'wb')
                 c = pycurl.Curl()
-                c.setopt(c.URL, m3u8_obj.base_uri + seg.uri)
+                c.setopt(c.URL, self.m3u8_obj.base_uri + seg.uri)
                 c.setopt(c.WRITEDATA, fp)
                 c.perform()
                 c.close()
@@ -113,6 +122,15 @@ class SegmentList:
                 lstfile.write("file '%s'\n" % mp4fname)      
             lstfile.close()
             FFMpegConcat(self.downloaddir + output + '.lst', output)
+
+    def getDiscontinuities(self):
+        discont = []
+        position = 0.0
+        for seg in self.m3u8_obj.segments: 
+            if seg.discontinuity:
+                discont.append(position)
+            position += float(seg.duration)
+        return discont
 
     def cleanup(self):
         if os.path.exists(self.downloaddir):

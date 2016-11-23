@@ -17,6 +17,7 @@ def main():
 
     debug.log('Downloading HLS: %s' % args.hlsuri)
     downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    
+    downloader.writeDiscontinuityFile(args.output)
     downloader.toMP4(args.output)
 
 if __name__ == '__main__':
