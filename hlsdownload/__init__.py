@@ -10,6 +10,8 @@ import ntpath
 import os
 import pycurl
 import subprocess
+from Queue import Queue
+from threading import Thread
 
 class HLSDownloader:
     def __init__(self, manifesturi, tmpdir, cleanup=True):
@@ -83,28 +85,46 @@ class SegmentList:
         self.downloadedsegs = []
         self.mp4segs = []
         self.m3u8_obj = m3u8.load(self.mediaplaylisturi)
+        self.q = Queue()
+        self.num_worker_threads = 10
 
     def getBitrate(self):
         return self.bitrate
+
+    def worker(self):
+        while True:
+            item = self.q.get()
+            debug.log('Downloading %s to %s%s' % (item['remoteurl'], item['downloaddir'], item['localfname']))
+            fp = open(item['downloaddir'] + item['localfname'], 'wb')
+            c = pycurl.Curl()
+            c.setopt(c.URL, item['remoteurl'])
+            c.setopt(c.WRITEDATA, fp)
+            c.perform()
+            c.close()
+            fp.close()
+            self.downloadedsegs.append(item['localfname'])
+            self.q.task_done()
 
     def download(self):
         if not os.path.exists(self.downloaddir):
             os.mkdir(self.downloaddir)
         print "Downloading segments from %s" % self.mediaplaylisturi
+        for i in range(self.num_worker_threads):
+            t = Thread(target=self.worker)
+            t.daemon = True
+            t.start()
         for seg in self.m3u8_obj.segments:
             head, tail = ntpath.split(self.downloaddir + seg.uri)
             localfname = tail
             if not os.path.isfile(self.downloaddir + localfname):
-                debug.log('Downloading %s%s to %s%s' % (self.m3u8_obj.base_uri, seg.uri, self.downloaddir, localfname)) 
-                fp = open(self.downloaddir + localfname, 'wb')
-                c = pycurl.Curl()
-                c.setopt(c.URL, self.m3u8_obj.base_uri + seg.uri)
-                c.setopt(c.WRITEDATA, fp)
-                c.perform()
-                c.close()
-                fp.close()
-            self.downloadedsegs.append(localfname)
-    
+                item = { 
+                    'remoteurl': self.m3u8_obj.base_uri + seg.uri,
+                    'localfname': localfname,
+                    'downloaddir': self.downloaddir
+                }
+                self.q.put(item)        
+        self.q.join()
+
     def convert(self):
         for segfname in self.downloadedsegs:
             mp4fname = segfname + '.mp4'
