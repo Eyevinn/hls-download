@@ -86,12 +86,13 @@ class SegmentList:
         self.mp4segs = []
         self.m3u8_obj = m3u8.load(self.mediaplaylisturi)
         self.q = Queue()
+        self.cq = Queue()
         self.num_worker_threads = 10
 
     def getBitrate(self):
         return self.bitrate
 
-    def worker(self):
+    def downloadWorker(self):
         while True:
             item = self.q.get()
             debug.log('Downloading %s to %s%s' % (item['remoteurl'], item['downloaddir'], item['localfname']))
@@ -110,7 +111,7 @@ class SegmentList:
             os.mkdir(self.downloaddir)
         print "Downloading segments from %s" % self.mediaplaylisturi
         for i in range(self.num_worker_threads):
-            t = Thread(target=self.worker)
+            t = Thread(target=self.downloadWorker)
             t.daemon = True
             t.start()
         for seg in self.m3u8_obj.segments:
@@ -122,16 +123,34 @@ class SegmentList:
                     'localfname': localfname,
                     'downloaddir': self.downloaddir
                 }
-                self.q.put(item)        
+                self.q.put(item)
+            mp4fname = localfname + '.mp4'
+            self.mp4segs.append(mp4fname)
         self.q.join()
 
+    def convertWorker(self):
+        while True:
+            item = self.cq.get()
+            debug.log('Converting %s%s to %s%s' % (item['downloaddir'], item['localfname'], item['downloaddir'], item['mp4fname']))
+            if not os.path.isfile(item['downloaddir'] + item['mp4fname']):
+                FFMpegCommand(item['downloaddir'] + item['localfname'], item['downloaddir'] + item['mp4fname'], '-acodec copy -bsf:a aac_adtstoasc -vcodec copy')
+            self.cq.task_done()
+
     def convert(self):
+        for i in range(self.num_worker_threads):
+            t = Thread(target=self.convertWorker)
+            t.daemon = True
+            t.start()
+
         for segfname in self.downloadedsegs:
             mp4fname = segfname + '.mp4'
-            if not os.path.isfile(self.downloaddir + mp4fname):
-                debug.log('Converting %s%s to %s%s' % (self.downloaddir, segfname, self.downloaddir, mp4fname)) 
-                FFMpegCommand(self.downloaddir + segfname, self.downloaddir + mp4fname, '-acodec copy -bsf:a aac_adtstoasc -vcodec copy')
-            self.mp4segs.append(mp4fname)
+            item = {
+                'downloaddir': self.downloaddir,
+                'localfname': segfname,
+                'mp4fname': mp4fname
+            }
+            self.cq.put(item)
+        self.cq.join()
 
     def concat(self, outputname):
         output = outputname + '-' + str(self.bitrate) + '.mp4'
