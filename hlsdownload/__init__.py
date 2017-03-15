@@ -12,6 +12,7 @@ import pycurl
 import subprocess
 from Queue import Queue
 from threading import Thread
+from urlparse import urlparse
 
 class HLSDownloader:
     def __init__(self, manifesturi, tmpdir, cleanup=True):
@@ -26,8 +27,12 @@ class HLSDownloader:
         if not m3u8_obj.is_variant:
             raise Exception('%s is not a master manifest' % self.manifesturi) 
         for mediaplaylist in m3u8_obj.playlists:
-            debug.log('Building segment list from %s' % mediaplaylist.uri)
-            segmentlist = SegmentList(mediaplaylist.uri, mediaplaylist.stream_info.average_bandwidth, self.tmpdir)
+            url = urlparse(self.manifesturi)
+            mediauri = mediaplaylist.uri
+            if mediaplaylist.uri[0] == "/":
+                mediauri = url.scheme + "://" + url.hostname + mediaplaylist.uri
+            debug.log('Building segment list from %s' % mediauri)
+            segmentlist = SegmentList(mediauri, mediaplaylist.stream_info.average_bandwidth, self.tmpdir)
             self.bitrates.append(segmentlist)
 
     def _downloadSegments(self, bitrate=None):
@@ -208,5 +213,7 @@ def FFMpegConcat(lstfile, outfile):
     cmd.append(lstfile) 
     cmd.append('-c')
     cmd.append('copy')
+    cmd.append('-r')
+    cmd.append('25')
     cmd.append(outfile)
     runcmd(cmd, 'ffmpeg')
