@@ -213,7 +213,5 @@ def FFMpegConcat(lstfile, outfile):
     cmd.append(lstfile) 
     cmd.append('-c')
     cmd.append('copy')
-    cmd.append('-r')
-    cmd.append('25')
     cmd.append(outfile)
     runcmd(cmd, 'ffmpeg')
