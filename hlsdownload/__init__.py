@@ -10,6 +10,7 @@ import ntpath
 import os
 import pycurl
 import subprocess
+import re
 from Queue import Queue
 from threading import Thread
 from urlparse import urlparse
@@ -26,6 +27,7 @@ class HLSDownloader:
         m3u8_obj = m3u8.load(self.manifesturi)
         if not m3u8_obj.is_variant:
             raise Exception('%s is not a master manifest' % self.manifesturi) 
+        listlengths = []
         for mediaplaylist in m3u8_obj.playlists:
             url = urlparse(self.manifesturi)
             mediauri = mediaplaylist.uri
@@ -34,6 +36,19 @@ class HLSDownloader:
             debug.log('Building segment list from %s' % mediauri)
             segmentlist = SegmentList(mediauri, mediaplaylist.stream_info.average_bandwidth, self.tmpdir)
             self.bitrates.append(segmentlist)
+            listlengths.append(segmentlist.getLength())
+
+        # This is to handle the edge case where the segmentlists differs in length and start segment
+        # A special case that actually should not happened
+        debug.log('Shortest list length %d' % min(listlengths))
+        debug.log('Longest list length %d' % max(listlengths))
+        if min(listlengths) != max(listlengths):
+            debug.log('Segment list lengths differs')
+            for segmentlist in self.bitrates:
+                while segmentlist.getLength() > min(listlengths):
+                    segmentlist.removeFirstSegment()
+        for segmentlist in self.bitrates:
+            debug.log('First segment: %s of (%d)' % (segmentlist.getFirstSegment(), segmentlist.getLength()))
 
     def _downloadSegments(self, bitrate=None):
         for segmentlist in self.bitrates:
@@ -72,12 +87,13 @@ class HLSDownloader:
                 f.write(str(d) + '\n')
         f.close()
 
-    def toMP4(self, output, bitrate=None):
-        self._downloadSegments(bitrate)
-        self._convertSegments(bitrate)
-        self._concatSegments(output, bitrate)
-        if self.cleanup:
-            self._cleanup()
+    def toMP4(self, output, bitrate=None, download=True):
+        if download:
+            self._downloadSegments(bitrate)
+            self._convertSegments(bitrate)
+            self._concatSegments(output, bitrate)
+            if self.cleanup:
+                self._cleanup()
 
 class SegmentList:
     def __init__(self, mediaplaylisturi, bitrate, downloaddir):
@@ -94,8 +110,21 @@ class SegmentList:
         self.cq = Queue()
         self.num_worker_threads = 10
 
+    def getFirstSegment(self):
+        p = re.compile('.*/(.*?)\.ts$')
+        m = p.match(self.m3u8_obj.segments[0].uri)
+        if m:
+            return m.group(1)
+        return None
+    
+    def getLength(self):
+        return len(self.m3u8_obj.segments)
+
     def getBitrate(self):
         return self.bitrate
+
+    def removeFirstSegment(self):
+        self.m3u8_obj.segments.pop(0)
 
     def downloadWorker(self):
         while True:

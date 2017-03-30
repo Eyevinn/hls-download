@@ -12,13 +12,14 @@ def main():
     parser.add_argument('output', metavar='OUTPUT', default='out', help='Output name')
     parser.add_argument('--debug', dest='debug', action='store_true', default=False, help='Write debug info to stderr')
     parser.add_argument('--nocleanup', dest='nocleanup', action='store_true', default=False, help='Do not remove temp files')
+    parser.add_argument('--nodownload', dest='nodownload', action='store_true', default=False, help='Do not download any segments')
     args = parser.parse_args()
     debug.doDebug = args.debug
 
     debug.log('Downloading HLS: %s' % args.hlsuri)
     downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    
     downloader.writeDiscontinuityFile(args.output)
-    downloader.toMP4(args.output)
+    downloader.toMP4(args.output, None, not args.nodownload)
 
 if __name__ == '__main__':
     try:
