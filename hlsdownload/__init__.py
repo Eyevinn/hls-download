@@ -47,8 +47,13 @@ class HLSDownloader:
             for segmentlist in self.bitrates:
                 while segmentlist.getLength() > min(listlengths):
                     segmentlist.removeFirstSegment()
+        firstsegments = {}
         for segmentlist in self.bitrates:
             debug.log('First segment: %s of (%d)' % (segmentlist.getFirstSegment(), segmentlist.getLength()))
+            firstsegments[segmentlist.getFirstSegment()] = 1
+        debug.log('Keys %d' % len(firstsegments.keys()))
+        if len(firstsegments.keys()) > 1:
+            print "WARNING: first segment in segment lists differs"
 
     def _downloadSegments(self, bitrate=None):
         for segmentlist in self.bitrates:
