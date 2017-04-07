@@ -42,9 +42,14 @@ class HLSDownloader:
         # A special case that actually should not happened
         debug.log('Shortest list length %d' % min(listlengths))
         debug.log('Longest list length %d' % max(listlengths))
-        if min(listlengths) != max(listlengths):
+        headsegments = {}
+        for segmentlist in self.bitrates:
+            headsegments[segmentlist.getFirstSegment()] = 1
+        # First segments differs if length differs and does not start with the same segment
+        if min(listlengths) != max(listlengths) and len(headsegments.keys()) > 1:
             debug.log('Segment list lengths differs')
             for segmentlist in self.bitrates:
+                debug.log('First segment %s (%d)' % (segmentlist.getFirstSegment(), segmentlist.getLength()))
                 while segmentlist.getLength() > min(listlengths):
                     segmentlist.removeFirstSegment()
         firstsegments = {}
@@ -172,7 +177,7 @@ class SegmentList:
             item = self.cq.get()
             debug.log('Converting %s%s to %s%s' % (item['downloaddir'], item['localfname'], item['downloaddir'], item['mp4fname']))
             if not os.path.isfile(item['downloaddir'] + item['mp4fname']):
-                FFMpegCommand(item['downloaddir'] + item['localfname'], item['downloaddir'] + item['mp4fname'], '-acodec copy -bsf:a aac_adtstoasc -vcodec copy')
+                FFMpegCommand(item['downloaddir'] + item['localfname'], item['downloaddir'] + item['mp4fname'], '-acodec copy -avoid_negative_ts 1 -bsf:a aac_adtstoasc -vcodec copy -copyts')
             self.cq.task_done()
 
     def convert(self):
