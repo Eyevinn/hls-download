@@ -3,6 +3,7 @@
 # license that can be found in the LICENSE file.
 # Author: Jonas Birme (Eyevinn Technology)
 import argparse
+import logging
 from hlsdownload import debug
 from hlsdownload import HLSDownloader
 
@@ -15,6 +16,13 @@ def main():
     parser.add_argument('--nodownload', dest='nodownload', action='store_true', default=False, help='Do not download any segments')
     args = parser.parse_args()
     debug.doDebug = args.debug
+
+    logger = logging.getLogger('hlsdownload')
+    hdlr = logging.FileHandler('hls-downloader.log')
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    hdlr.setFormatter(formatter)
+    logger.addHandler(hdlr)
+    logger.setLevel(logging.INFO)
 
     debug.log('Downloading HLS: %s' % args.hlsuri)
     downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    

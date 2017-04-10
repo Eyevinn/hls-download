@@ -11,9 +11,12 @@ import os
 import pycurl
 import subprocess
 import re
+import logging
 from Queue import Queue
 from threading import Thread
 from urlparse import urlparse
+
+logger = logging.getLogger('hlsdownload')
 
 class HLSDownloader:
     def __init__(self, manifesturi, tmpdir, cleanup=True):
@@ -58,7 +61,7 @@ class HLSDownloader:
             firstsegments[segmentlist.getFirstSegment()] = 1
         debug.log('Keys %d' % len(firstsegments.keys()))
         if len(firstsegments.keys()) > 1:
-            print "WARNING: first segment in segment lists differs"
+            logger.warning("WARNING: first segment in segment lists differs")
 
     def _downloadSegments(self, bitrate=None):
         for segmentlist in self.bitrates:
@@ -145,6 +148,8 @@ class SegmentList:
             c.setopt(c.URL, item['remoteurl'])
             c.setopt(c.WRITEDATA, fp)
             c.perform()
+            if c.getinfo(pycurl.HTTP_CODE) != 200:
+                logger.error("FAILED to download %s: %d" % (item['remoteurl'], c.getinfo(pycurl.HTTP_CODE)))
             c.close()
             fp.close()
             self.downloadedsegs.append(item['localfname'])
@@ -153,7 +158,7 @@ class SegmentList:
     def download(self):
         if not os.path.exists(self.downloaddir):
             os.mkdir(self.downloaddir)
-        print "Downloading segments from %s" % self.mediaplaylisturi
+        logger.info("Downloading segments from %s" % self.mediaplaylisturi)
         for i in range(self.num_worker_threads):
             t = Thread(target=self.downloadWorker)
             t.daemon = True
@@ -198,7 +203,7 @@ class SegmentList:
 
     def concat(self, outputname):
         output = outputname + '-' + str(self.bitrate) + '.mp4'
-        print "Converting segments and writing to %s" % output
+        logger.info("Converting segments and writing to %s" % output)
         if not os.path.isfile(output):
             lstfile = open(self.downloaddir + output + '.lst', 'w')
             for mp4fname in self.mp4segs:
