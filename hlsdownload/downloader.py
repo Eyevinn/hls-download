@@ -25,14 +25,17 @@ def main():
     logger.setLevel(logging.INFO)
 
     debug.log('Downloading HLS: %s' % args.hlsuri)
-    downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    
-    downloader.writeDiscontinuityFile(args.output)
-    downloader.toMP4(args.output, None, not args.nodownload)
+    logger.info("------------------------ NEW SESSION -------------------------")
+    try:
+        downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    
+        downloader.writeDiscontinuityFile(args.output)
+        downloader.toMP4(args.output, None, not args.nodownload)
+    except Exception as e:
+        logger.error('Unrecoverable error: ' + str(e))
 
 if __name__ == '__main__':
     try:
         main()
     except Exception, err:
         raise
-
 

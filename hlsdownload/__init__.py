@@ -27,6 +27,7 @@ class HLSDownloader:
         self._collectSegments()
 
     def _collectSegments(self):
+        logger.info('Downloading and parsing HLS manifest from %s' % self.manifesturi)
         m3u8_obj = m3u8.load(self.manifesturi)
         if not m3u8_obj.is_variant:
             raise Exception('%s is not a master manifest' % self.manifesturi) 
@@ -37,9 +38,17 @@ class HLSDownloader:
             if mediaplaylist.uri[0] == "/":
                 mediauri = url.scheme + "://" + url.hostname + mediaplaylist.uri
             debug.log('Building segment list from %s' % mediauri)
-            segmentlist = SegmentList(mediauri, mediaplaylist.stream_info.average_bandwidth, self.tmpdir)
-            self.bitrates.append(segmentlist)
-            listlengths.append(segmentlist.getLength())
+            try:
+                logger.info('Downloading segment playlist from %s' % mediauri)
+                segmentlist = SegmentList(mediauri, mediaplaylist.stream_info.average_bandwidth, self.tmpdir)
+            except Exception as e:
+                logger.error('Failed to download: %s' % str(e))
+            else:
+                logger.info('Segment playlist from %s downloaded and parsed' % mediauri)
+                self.bitrates.append(segmentlist)
+                listlengths.append(segmentlist.getLength())
+        if len(self.bitrates) == 0:
+            raise Exception('No segment playlists that could be downloaded was found')
 
         # This is to handle the edge case where the segmentlists differs in length and start segment
         # A special case that actually should not happened
@@ -61,7 +70,7 @@ class HLSDownloader:
             firstsegments[segmentlist.getFirstSegment()] = 1
         debug.log('Keys %d' % len(firstsegments.keys()))
         if len(firstsegments.keys()) > 1:
-            logger.warning("WARNING: first segment in segment lists differs")
+            logger.warning("First segment in segment lists differs")
 
     def _downloadSegments(self, bitrate=None):
         for segmentlist in self.bitrates:
@@ -176,6 +185,7 @@ class SegmentList:
             mp4fname = localfname + '.mp4'
             self.mp4segs.append(mp4fname)
         self.q.join()
+        logger.info("Segments downloaded")
 
     def convertWorker(self):
         while True:
@@ -210,6 +220,7 @@ class SegmentList:
                 lstfile.write("file '%s'\n" % mp4fname)      
             lstfile.close()
             FFMpegConcat(self.downloaddir + output + '.lst', output)
+            logger.info("Segments converted")
 
     def getDiscontinuities(self):
         discont = []
