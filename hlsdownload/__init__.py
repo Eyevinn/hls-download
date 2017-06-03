@@ -40,7 +40,10 @@ class HLSDownloader:
             debug.log('Building segment list from %s' % mediauri)
             try:
                 logger.info('Downloading segment playlist from %s' % mediauri)
-                segmentlist = SegmentList(mediauri, mediaplaylist.stream_info.average_bandwidth, self.tmpdir)
+                bw = mediaplaylist.stream_info.average_bandwidth
+                if not bw:
+                    bw = mediaplaylist.stream_info.bandwidth
+                segmentlist = SegmentList(mediauri, bw, self.tmpdir)
             except Exception as e:
                 logger.error('Failed to download: %s' % str(e))
             else:
