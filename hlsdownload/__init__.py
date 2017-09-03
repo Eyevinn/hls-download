@@ -33,10 +33,7 @@ class HLSDownloader:
             raise Exception('%s is not a master manifest' % self.manifesturi) 
         listlengths = []
         for mediaplaylist in m3u8_obj.playlists:
-            url = urlparse(self.manifesturi)
-            mediauri = mediaplaylist.uri
-            if mediaplaylist.uri[0] == "/":
-                mediauri = url.scheme + "://" + url.hostname + mediaplaylist.uri
+            mediauri = mediaplaylist.base_uri + mediaplaylist.uri
             debug.log('Building segment list from %s' % mediauri)
             try:
                 logger.info('Downloading segment playlist from %s' % mediauri)
