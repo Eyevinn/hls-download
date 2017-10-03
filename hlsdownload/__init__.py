@@ -12,6 +12,7 @@ import pycurl
 import subprocess
 import re
 import logging
+import operator
 from Queue import Queue
 from threading import Thread
 from urlparse import urlparse
@@ -59,20 +60,48 @@ class HLSDownloader:
         debug.log('Longest list length %d' % max(listlengths))
         headsegments = {}
         for segmentlist in self.bitrates:
-            headsegments[segmentlist.getFirstSegment()] = 1
-        # First segments differs if length differs and does not start with the same segment
-        if min(listlengths) != max(listlengths) and len(headsegments.keys()) > 1:
-            debug.log('Segment list lengths differs')
+            if segmentlist.getFirstSegment() in headsegments:
+                headsegments[segmentlist.getFirstSegment()] += 1
+            else:
+                headsegments[segmentlist.getFirstSegment()] = 1
+        debug.log(headsegments)
+    
+        # Find start segment winner
+        winner = sorted(headsegments.items(), key=operator.itemgetter(1), reverse=True)[0][0]
+
+        # Make sure all bitrates starts with the same segment
+        if len(headsegments.keys()) > 1:
+            debug.log('First segment differs and we have chosen %s as winner' % winner)
             for segmentlist in self.bitrates:
-                debug.log('First segment %s (%d)' % (segmentlist.getFirstSegment(), segmentlist.getLength()))
-                while segmentlist.getLength() > min(listlengths):
+                if segmentlist.getFirstSegment() != winner:
                     segmentlist.removeFirstSegment()
+        
+        # Make sure that we have the same length on all bitrates 
+        segmentlengths = {}
+        for segmentlist in self.bitrates:
+            length = segmentlist.getLength()
+            if length in segmentlengths:
+                segmentlengths[length] += 1
+            else:
+                segmentlengths[length] = 1
+        shortestlength = sorted(segmentlengths.items(), key=operator.itemgetter(0))[0][0]
+        debug.log(shortestlength)
+        for segmentlist in self.bitrates:
+            length = segmentlist.getLength()
+            if length > shortestlength:
+                segmentlist.removeLastSegment()
+
+        # Sanity check
         firstsegments = {}
         for segmentlist in self.bitrates:
             debug.log('First segment: %s of (%d)' % (segmentlist.getFirstSegment(), segmentlist.getLength()))
-            firstsegments[segmentlist.getFirstSegment()] = 1
+            if segmentlist.getFirstSegment() in firstsegments:
+                firstsegments[segmentlist.getFirstSegment()] += 1
+            else:
+                firstsegments[segmentlist.getFirstSegment()] = 1
         debug.log('Keys %d' % len(firstsegments.keys()))
         if len(firstsegments.keys()) > 1:
+            debug.log(firstsegments)
             logger.warning("First segment in segment lists differs")
 
     def _downloadSegments(self, bitrate=None):
@@ -150,6 +179,9 @@ class SegmentList:
 
     def removeFirstSegment(self):
         self.m3u8_obj.segments.pop(0)
+
+    def removeLastSegment(self):
+        self.m3u8_obj.segments.pop()
 
     def downloadWorker(self):
         while True:
