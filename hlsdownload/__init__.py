@@ -163,6 +163,7 @@ class SegmentList:
         self.q = Queue()
         self.cq = Queue()
         self.num_worker_threads = 10
+        self.failedDownloads = False
 
     def getFirstSegment(self):
         p = re.compile('.*/(.*?)\.ts$')
@@ -186,18 +187,30 @@ class SegmentList:
     def downloadWorker(self):
         while True:
             item = self.q.get()
-            debug.log('Downloading %s to %s%s' % (item['remoteurl'], item['downloaddir'], item['localfname']))
-            fp = open(item['downloaddir'] + item['localfname'], 'wb')
-            c = pycurl.Curl()
-            c.setopt(c.URL, item['remoteurl'])
-            c.setopt(c.WRITEDATA, fp)
-            c.perform()
-            if c.getinfo(pycurl.HTTP_CODE) != 200:
-                logger.error("FAILED to download %s: %d" % (item['remoteurl'], c.getinfo(pycurl.HTTP_CODE)))
-            c.close()
-            fp.close()
-            self.downloadedsegs.append(item['localfname'])
-            self.q.task_done()
+            try:
+                debug.log('Downloading %s to %s%s' % (item['remoteurl'], item['downloaddir'], item['localfname']))
+                fp = open(item['downloaddir'] + item['localfname'], 'wb')
+                c = pycurl.Curl()
+                c.setopt(c.URL, item['remoteurl'])
+                c.setopt(c.WRITEDATA, fp)
+                c.perform()
+                if c.getinfo(pycurl.HTTP_CODE) != 200:
+                    logger.error("FAILED to download %s: %d" % (item['remoteurl'], c.getinfo(pycurl.HTTP_CODE)))
+                c.close()
+                fp.close()
+                self.downloadedsegs.append(item['localfname'])
+            except pycurl.error:
+                logger.error('Caught exception while downloading %s' % item['remoteurl'])
+                c.close()
+                item['retries'] += 1
+                if (item['retries'] < 4):
+                    logger.info('Retry counter is %d, will try again' % item['retries'])
+                    self.q.put(item)
+                else:
+                    logger.error('Retry counter exceeded for %s' % item['localfname'])
+                    self.failedDownloads = True
+            finally:
+                self.q.task_done()
 
     def download(self):
         if not os.path.exists(self.downloaddir):
@@ -214,13 +227,18 @@ class SegmentList:
                 item = { 
                     'remoteurl': self.m3u8_obj.base_uri + seg.uri,
                     'localfname': localfname,
-                    'downloaddir': self.downloaddir
+                    'downloaddir': self.downloaddir,
+                    'retries': 0
                 }
                 self.q.put(item)
             mp4fname = localfname + '.mp4'
             self.mp4segs.append(mp4fname)
         self.q.join()
-        logger.info("Segments downloaded")
+        if self.failedDownloads:
+            logger.error('Some segments failed to download, raising exception')
+            raise Exception('Some segments failed to download')
+        else:
+            logger.info("All segments downloaded")
 
     def convertWorker(self):
         while True:
@@ -231,6 +249,7 @@ class SegmentList:
             self.cq.task_done()
 
     def convert(self):
+        logger.info("Converting downloaded TS segments to MP4 files")
         for i in range(self.num_worker_threads):
             t = Thread(target=self.convertWorker)
             t.daemon = True
