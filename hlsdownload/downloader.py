@@ -14,6 +14,7 @@ def main():
     parser.add_argument('--debug', dest='debug', action='store_true', default=False, help='Write debug info to stderr')
     parser.add_argument('--nocleanup', dest='nocleanup', action='store_true', default=False, help='Do not remove temp files')
     parser.add_argument('--nodownload', dest='nodownload', action='store_true', default=False, help='Do not download any segments')
+    parser.add_argument('--singlebitrate', dest='bitrate', default=None, help='Download only one bitrate')
     args = parser.parse_args()
     debug.doDebug = args.debug
 
@@ -29,7 +30,7 @@ def main():
     try:
         downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    
         downloader.writeDiscontinuityFile(args.output)
-        downloader.toMP4(args.output, None, not args.nodownload)
+        downloader.toMP4(args.output, args.bitrate, not args.nodownload)
     except Exception as e:
         logger.error('Unrecoverable error: ' + str(e))
 

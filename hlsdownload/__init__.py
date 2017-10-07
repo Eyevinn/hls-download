@@ -44,7 +44,7 @@ class HLSDownloader:
                 bw = mediaplaylist.stream_info.average_bandwidth
                 if not bw:
                     bw = mediaplaylist.stream_info.bandwidth
-                segmentlist = SegmentList(mediauri, bw, self.tmpdir)
+                segmentlist = SegmentList(mediauri, str(bw), self.tmpdir)
             except Exception as e:
                 logger.error('Failed to download: %s' % str(e))
             else:
@@ -107,6 +107,7 @@ class HLSDownloader:
     def _downloadSegments(self, bitrate=None):
         for segmentlist in self.bitrates:
             if bitrate:
+                debug.log('Specified bitrate to download %s (%s)' % (bitrate, segmentlist.getBitrate()))
                 if segmentlist.getBitrate() == bitrate:
                     segmentlist.download()
             else:
@@ -196,9 +197,10 @@ class SegmentList:
                 c.perform()
                 if c.getinfo(pycurl.HTTP_CODE) != 200:
                     logger.error("FAILED to download %s: %d" % (item['remoteurl'], c.getinfo(pycurl.HTTP_CODE)))
+                    raise pycurl.error()
                 c.close()
                 fp.close()
-                self.downloadedsegs.append(item['localfname'])
+                self.downloadedsegs.append((item['order'], item['localfname']))
             except pycurl.error:
                 logger.error('Caught exception while downloading %s' % item['remoteurl'])
                 c.close()
@@ -209,6 +211,7 @@ class SegmentList:
                 else:
                     logger.error('Retry counter exceeded for %s' % item['localfname'])
                     self.failedDownloads = True
+
             finally:
                 self.q.task_done()
 
@@ -220,6 +223,7 @@ class SegmentList:
             t = Thread(target=self.downloadWorker)
             t.daemon = True
             t.start()
+        order = 0
         for seg in self.m3u8_obj.segments:
             head, tail = ntpath.split(self.downloaddir + seg.uri)
             localfname = tail
@@ -228,8 +232,10 @@ class SegmentList:
                     'remoteurl': self.m3u8_obj.base_uri + seg.uri,
                     'localfname': localfname,
                     'downloaddir': self.downloaddir,
-                    'retries': 0
+                    'retries': 0,
+                    'order': order
                 }
+                order += 1
                 self.q.put(item)
             mp4fname = localfname + '.mp4'
             self.mp4segs.append(mp4fname)
@@ -255,11 +261,12 @@ class SegmentList:
             t.daemon = True
             t.start()
 
-        for segfname in self.downloadedsegs:
-            mp4fname = segfname + '.mp4'
+        for segfname in sorted(self.downloadedsegs, key=operator.itemgetter(0)):
+            debug.log('Processing %s (%s)' % (segfname[1], segfname[0]))
+            mp4fname = segfname[1] + '.mp4'
             item = {
                 'downloaddir': self.downloaddir,
-                'localfname': segfname,
+                'localfname': segfname[1],
                 'mp4fname': mp4fname
             }
             self.cq.put(item)
