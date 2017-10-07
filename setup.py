@@ -16,7 +16,7 @@ install_reqs = [req for req in open(abspath(join(dirname(__file__), 'requirement
 
 setup(
     name = "hlsdownload",
-    version = "0.0.16",
+    version = "0.0.17",
     author = "Jonas Birme",
     author_email = "jonas.birme@eyevinn.se",
     description = "Download HLS and convert to MP4",
