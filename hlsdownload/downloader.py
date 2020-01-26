@@ -15,6 +15,7 @@ def main():
     parser.add_argument('--nocleanup', dest='nocleanup', action='store_true', default=False, help='Do not remove temp files')
     parser.add_argument('--nodownload', dest='nodownload', action='store_true', default=False, help='Do not download any segments')
     parser.add_argument('--singlebitrate', dest='bitrate', default=None, help='Download only one bitrate')
+    parser.add_argument('--numretries', dest='retries', default=3, help='Number of times to retry downloading a failed segment. Default is 3')
     args = parser.parse_args()
     debug.doDebug = args.debug
 
@@ -28,7 +29,7 @@ def main():
     debug.log('Downloading HLS: %s' % args.hlsuri)
     logger.info("------------------------ NEW SESSION -------------------------")
     try:
-        downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup)    
+        downloader = HLSDownloader(args.hlsuri, '.', not args.nocleanup, int(args.retries))    
         downloader.writeDiscontinuityFile(args.output)
         downloader.toMP4(args.output, args.bitrate, not args.nodownload)
     except Exception as e:

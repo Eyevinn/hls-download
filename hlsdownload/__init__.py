@@ -20,11 +20,12 @@ from urlparse import urlparse
 logger = logging.getLogger('hlsdownload')
 
 class HLSDownloader:
-    def __init__(self, manifesturi, tmpdir, cleanup=True):
+    def __init__(self, manifesturi, tmpdir, cleanup=True, retries=3):
         self.manifesturi = manifesturi
         self.tmpdir = tmpdir
         self.bitrates = []
         self.cleanup = cleanup
+        self.retrylimit = retries + 1
         self._collectSegments()
 
     def _collectSegments(self):
@@ -44,7 +45,7 @@ class HLSDownloader:
                 bw = mediaplaylist.stream_info.average_bandwidth
                 if not bw:
                     bw = mediaplaylist.stream_info.bandwidth
-                segmentlist = SegmentList(mediauri, str(bw), self.tmpdir)
+                segmentlist = SegmentList(mediauri, str(bw), self.tmpdir, self.retrylimit)
             except Exception as e:
                 logger.error('Failed to download: %s' % str(e))
             else:
@@ -151,7 +152,7 @@ class HLSDownloader:
                 self._cleanup()
 
 class SegmentList:
-    def __init__(self, mediaplaylisturi, bitrate, downloaddir):
+    def __init__(self, mediaplaylisturi, bitrate, downloaddir, retrylimit=4):
         self.mediaplaylisturi = mediaplaylisturi
         self.bitrate = bitrate
         if not downloaddir == '.':
@@ -165,6 +166,7 @@ class SegmentList:
         self.cq = Queue()
         self.num_worker_threads = 10
         self.failedDownloads = False
+        self.retrylimit = retrylimit
 
     def getFirstSegment(self):
         p = re.compile('.*/(.*?)\.ts$')
@@ -186,10 +188,11 @@ class SegmentList:
         self.m3u8_obj.segments.pop()
 
     def downloadWorker(self):
+        logger.info('Starting download worker (retries=%d)' % self.retrylimit-1)
         while True:
             item = self.q.get()
             try:
-                debug.log('Downloading %s to %s%s' % (item['remoteurl'], item['downloaddir'], item['localfname']))
+                debug.log('Downloading %s to %s%s (retries=%d)' % (item['remoteurl'], item['downloaddir'], item['localfname'], self.retrylimit-1))
                 fp = open(item['downloaddir'] + item['localfname'], 'wb')
                 c = pycurl.Curl()
                 c.setopt(c.URL, item['remoteurl'])
@@ -205,7 +208,7 @@ class SegmentList:
                 logger.error('Caught exception while downloading %s' % item['remoteurl'])
                 c.close()
                 item['retries'] += 1
-                if (item['retries'] < 4):
+                if (item['retries'] < self.retrylimit):
                     logger.info('Retry counter is %d, will try again' % item['retries'])
                     self.q.put(item)
                 else:
